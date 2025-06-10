@@ -1,13 +1,13 @@
-import React, { useRef, useEffect, useState } from 'react';
 import {
-  Chart as ChartJS,
   ArcElement,
-  Tooltip,
-  Legend,
+  Chart as ChartJS,
   ChartOptions,
+  Legend,
+  Tooltip,
 } from 'chart.js';
+import { BarChart3, Download, Search } from 'lucide-react';
+import React, { useRef, useState } from 'react';
 import { Doughnut } from 'react-chartjs-2';
-import { ChevronDown, BarChart3, Layers, TrendingUp, Search, Filter } from 'lucide-react';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -28,76 +28,91 @@ const SunburstChart: React.FC<SunburstChartProps> = ({
   title = "Sunburst Chart",
   className = "" 
 }) => {
+  const handleExportCSV = () => {
+    const headers = ['Name', 'Value', '% of Total', 'Has Children'];
+    const total = currentData.values.reduce((a, b) => a + b, 0);
+    const rows = currentData.nodes.map((item, i) => {
+      const value = currentData.values[i];
+      const percent = total ? ((value / total) * 100).toFixed(2) : '0.00';
+      return [
+        `"${item.name.replace(/"/g, '""')}"`, // Ensure quotes are closed
+        value,
+        `${percent}%`,
+        item.children && item.children.length > 0 ? 'Yes' : 'No',
+      ].join(',');
+    });
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'sunburst-data.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const [currentLevel, setCurrentLevel] = useState<DataItem[]>(data);
   const [levelHistory, setLevelHistory] = useState<DataItem[][]>([data]);
   const [hoveredSegment, setHoveredSegment] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [clickedSegment, setClickedSegment] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const chartRef = useRef<ChartJS<'doughnut'>>(null);
 
-  // Calculate values for nodes that don't have explicit values
+  // Recursively calculate value for a node
   const calculateNodeValue = (node: DataItem): number => {
-    if (node.value !== undefined) {
-      return node.value;
-    }
-    if (node.children && node.children.length > 0) {
-      return node.children.reduce((sum, child) => sum + calculateNodeValue(child), 0);
-    }
+    if (typeof node.value === 'number') return node.value;
+    if (node.children) return node.children.reduce((sum, c) => sum + calculateNodeValue(c), 0);
     return 0;
   };
 
-  // Filter data based on search keyword
+  // Filter data by keyword, preserving parent context
   const filterData = (nodes: DataItem[], keyword: string): DataItem[] => {
-    if (!keyword.trim()) return nodes;
-    
-    const filtered: DataItem[] = [];
-    
-    for (const node of nodes) {
-      if (node.name.toLowerCase().includes(keyword.toLowerCase())) {
-        filtered.push(node);
-      } else if (node.children) {
-        const filteredChildren = filterData(node.children, keyword);
-        if (filteredChildren.length > 0) {
-          filtered.push({
-            ...node,
-            children: filteredChildren
-          });
-        }
+    if (!keyword) return nodes;
+    const lower = keyword.toLowerCase();
+    const filterRecursive = (node: DataItem): DataItem | null => {
+      if (node.name.toLowerCase().includes(lower)) return node;
+      if (node.children) {
+        const filtered = node.children.map(filterRecursive).filter(Boolean) as DataItem[];
+        if (filtered.length > 0) return { ...node, children: filtered };
       }
-    }
-    
-    return filtered;
+      return null;
+    };
+    return nodes.map(filterRecursive).filter(Boolean) as DataItem[];
   };
 
-  // Get current display data
+  // Get current display data (filtered and at current drill level)
   const getDisplayData = () => {
-    const filtered = filterData(currentLevel, searchKeyword);
-    return filtered;
+    return filterData(currentLevel, searchKeyword);
   };
 
-  // Generate colors based on depth and index
-  const generateColors = (count: number, depth: number = 0) => {
-    const colorPalettes = [
-      // Level 0 - Main categories
-      ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'],
-      // Level 1 - Subcategories  
-      ['#60A5FA', '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#22D3EE'],
-      // Level 2 - Sub-subcategories
-      ['#93C5FD', '#6EE7B7', '#FCD34D', '#FCA5A5', '#C4B5FD', '#67E8F9']
-    ];
-    
-    const palette = colorPalettes[Math.min(depth, colorPalettes.length - 1)];
-    const colors: string[] = [];
-    
-    for (let i = 0; i < count; i++) {
-      colors.push(palette[i % palette.length]);
+  // Generate color palette by depth and index
+  const baseColors = [
+    '#2563eb', '#f59e42', '#10b981', '#f43f5e', '#a21caf', '#eab308', '#0ea5e9', '#6366f1', '#f472b6', '#22d3ee', '#84cc16', '#f87171', '#facc15', '#14b8a6', '#c026d3', '#fb7185', '#fbbf24', '#38bdf8', '#4ade80', '#fcd34d'
+  ];
+  const adjustColorBrightness = (color: string, amount: number) => {
+    let usePound = false;
+    let col = color;
+    if (col[0] === "#") {
+      col = col.slice(1);
+      usePound = true;
     }
-    
-    return colors;
+    let num = parseInt(col, 16);
+    let r = (num >> 16) + amount;
+    let b = ((num >> 8) & 0x00FF) + amount;
+    let g = (num & 0x0000FF) + amount;
+    r = Math.max(Math.min(255, r), 0);
+    b = Math.max(Math.min(255, b), 0);
+    g = Math.max(Math.min(255, g), 0);
+    return (usePound ? "#" : "") + (g | (b << 8) | (r << 16)).toString(16).padStart(6, '0');
+  };
+  const generateColors = (count: number, depth: number = 0) => {
+    return Array.from({ length: count }, (_, i) => adjustColorBrightness(baseColors[i % baseColors.length], depth * 20));
   };
 
   // Process data for Chart.js
-  const processData = (nodes: DataItem[]) => {
+  const processData = (): { labels: string[]; values: number[]; colors: string[]; hoverColors: string[]; nodes: DataItem[] } => {
     const labels: string[] = [];
     const values: number[] = [];
     const colors: string[] = [];
@@ -117,18 +132,8 @@ const SunburstChart: React.FC<SunburstChartProps> = ({
     return { labels, values, colors, hoverColors, nodes: displayData };
   };
 
-  // Helper function to adjust color brightness
-  const adjustColorBrightness = (color: string, amount: number) => {
-    const hex = color.replace('#', '');
-    const num = parseInt(hex, 16);
-    const r = Math.min(255, Math.max(0, (num >> 16) + amount));
-    const g = Math.min(255, Math.max(0, (num >> 8 & 0x00FF) + amount));
-    const b = Math.min(255, Math.max(0, (num & 0x0000FF) + amount));
-    return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
-  };
-
-  const currentData = processData(currentLevel);
-
+  // Chart.js data
+  const currentData = processData();
   const chartData = {
     labels: currentData.labels,
     datasets: [
@@ -136,275 +141,214 @@ const SunburstChart: React.FC<SunburstChartProps> = ({
         data: currentData.values,
         backgroundColor: currentData.colors,
         hoverBackgroundColor: currentData.hoverColors,
-        borderWidth: 3,
-        borderColor: '#ffffff',
-        hoverBorderWidth: 4,
-        hoverBorderColor: '#ffffff',
+        borderWidth: 2,
+        borderColor: '#fff',
+        hoverBorderWidth: 3,
+        hoverBorderColor: '#2563eb',
         borderRadius: 4,
         borderAlign: 'inner' as const,
       },
     ],
   };
 
-  const options: ChartOptions<'doughnut'> = {
-    responsive: true,
-    maintainAspectRatio: false,
-    cutout: levelHistory.length === 1 ? '45%' : '55%',
+  // Chart.js options
+  const chartOptions: ChartOptions<'doughnut'> = {
     plugins: {
-      legend: {
-        display: false,
-      },
+      legend: { display: false },
       tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        titleColor: '#ffffff',
-        bodyColor: '#ffffff',
-        borderColor: '#374151',
-        borderWidth: 1,
-        cornerRadius: 12,
-        padding: 16,
-        titleFont: {
-          size: 14,
-          weight: '600',
-        },
-        bodyFont: {
-          size: 13,
-        },
         callbacks: {
-          label: (context) => {
-            const label = context.label || '';
-            const value = context.parsed;
-            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
-            const percentage = ((value / total) * 100).toFixed(1);
-            return `${label}: ${value} (${percentage}%)`;
+          label: (ctx) => {
+            const label = ctx.label || '';
+            const value = ctx.raw as number;
+            const total = ctx.dataset.data.reduce((a: number, b: number) => a + b, 0);
+            const percent = total ? ((value / total) * 100).toFixed(1) : '0';
+            return `${label}: ${value} (${percent}%)`;
           },
         },
+        backgroundColor: '#fff',
+        titleColor: '#2563eb',
+        bodyColor: '#222',
+        borderColor: '#2563eb',
+        borderWidth: 1,
+        padding: 12,
+        displayColors: false,
+        caretSize: 8,
+        cornerRadius: 8,
       },
     },
-    onHover: (event, elements) => {
+    cutout: '60%',
+    onHover: (_event, elements) => {
       if (elements.length > 0) {
-        const elementIndex = elements[0].index;
-        setHoveredSegment(currentData.labels[elementIndex]);
+        setHoveredSegment(currentData.labels[elements[0].index]);
       } else {
         setHoveredSegment(null);
       }
     },
-    onClick: (event, elements) => {
+    onClick: (_event, elements) => {
       if (elements.length > 0) {
         const elementIndex = elements[0].index;
         const clickedNode = currentData.nodes[elementIndex];
-        setClickedSegment(clickedNode.name);
-        
+        setHoveredSegment(clickedNode.name);
+        setSelectedIndex(elementIndex); // highlight row in table
         // Drill down if the node has children
         if (clickedNode.children && clickedNode.children.length > 0) {
           setCurrentLevel(clickedNode.children);
           setLevelHistory([...levelHistory, clickedNode.children]);
         }
+      } else {
+        setSelectedIndex(null);
       }
     },
-    animation: {
-      animateRotate: true,
-      animateScale: true,
-      duration: 800,
-      easing: 'easeOutQuart',
-    },
-    elements: {
-      arc: {
-        borderJoinStyle: 'round',
-      },
-    },
+    animation: { animateRotate: true, animateScale: true },
+    responsive: true,
+    maintainAspectRatio: false,
   };
 
-  // Navigate back to previous level
-  const navigateBack = () => {
-    if (levelHistory.length > 1) {
-      const newHistory = levelHistory.slice(0, -1);
-      setLevelHistory(newHistory);
-      setCurrentLevel(newHistory[newHistory.length - 1]);
-      setClickedSegment(null);
+  // Inline the breadcrumb path logic since getBreadcrumbPath is now unused elsewhere
+  const breadcrumbPath: { name: string; nodes: DataItem[] }[] = (() => {
+    const path: { name: string; nodes: DataItem[] }[] = [];
+    let nodes = data;
+    for (let i = 0; i < levelHistory.length; i++) {
+      if (i === 0) {
+        path.push({ name: 'Root', nodes });
+      } else {
+        const prevNodes = levelHistory[i - 1];
+        const currentNodes = levelHistory[i];
+        const match = prevNodes.find((n) =>
+          n.children && n.children.some((c) => c.name === currentNodes[0].name)
+        );
+        if (match) {
+          path.push({ name: match.name, nodes: currentNodes });
+          nodes = match.children || [];
+        }
+      }
     }
-  };
+    return path;
+  })();
 
-  // Reset to root level
-  const resetToRoot = () => {
-    setCurrentLevel(data);
-    setLevelHistory([data]);
-    setClickedSegment(null);
-    setSearchKeyword('');
-  };
-
-  // Calculate total value
-  const totalValue = currentData.values.reduce((sum, value) => sum + value, 0);
-
-  // Get current level name
-  const getCurrentLevelName = () => {
-    if (levelHistory.length === 1) return 'Root Level';
-    return `Level ${levelHistory.length}`;
-  };
-
+  // UI
   return (
-    <div className={`bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden ${className}`}>
-      {/* Header */}
-      <div className="px-8 py-6 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-100 rounded-xl">
-              <BarChart3 className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
-              <p className="text-sm text-gray-600 mt-1">Interactive hierarchical data visualization</p>
-            </div>
-          </div>
-          
-          {/* Navigation Controls */}
-          <div className="flex items-center space-x-3">
-            {levelHistory.length > 1 && (
-              <button
-                onClick={navigateBack}
-                className="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                ← Back
-              </button>
-            )}
-            <button
-              onClick={resetToRoot}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              Reset
-            </button>
-          </div>
+    <div className={`w-full bg-white rounded-2xl shadow-lg p-6 ${className}`}>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-2">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-6 h-6 text-blue-600" />
+          <h2 className="text-xl font-bold text-gray-900">{title}</h2>
         </div>
-
-        {/* Search and Level Info */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 bg-white rounded-lg px-4 py-2 border border-gray-200">
-            <Layers className="w-4 h-4 text-gray-500" />
-            <span className="text-sm font-medium text-gray-700">{getCurrentLevelName()}</span>
-          </div>
-          
+        <div className="flex gap-2 items-center">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
             <input
               type="text"
+              className="pl-10 pr-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-200 focus:border-blue-400 text-gray-700 bg-gray-50"
               placeholder="Filter by keyword..."
               value={searchKeyword}
-              onChange={(e) => setSearchKeyword(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              onChange={e => setSearchKeyword(e.target.value)}
             />
+            <Search className="absolute left-2 top-2.5 w-4 h-4 text-gray-400" />
           </div>
+          <button
+            className="ml-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 flex items-center gap-1"
+            onClick={handleExportCSV}
+            title="Export as CSV"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
         </div>
       </div>
-
-      <div className="p-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Chart Container */}
-          <div className="lg:col-span-2">
-            <div className="relative">
-              <div className="h-96 relative">
-                <Doughnut ref={chartRef} data={chartData} options={options} />
-                
-                {/* Center Content */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-gray-900 mb-1">
-                      {totalValue.toLocaleString()}
-                    </div>
-                    <div className="text-sm text-gray-500 font-medium">Total Value</div>
-                    {hoveredSegment && (
-                      <div className="mt-2 px-3 py-1 bg-blue-100 rounded-full">
-                        <div className="text-xs font-medium text-blue-700">{hoveredSegment}</div>
-                      </div>
-                    )}
-                    {clickedSegment && (
-                      <div className="mt-2 px-3 py-1 bg-green-100 rounded-full">
-                        <div className="text-xs font-medium text-green-700">Clicked: {clickedSegment}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
+      {/* Breadcrumb Navigation (single navigation, includes Root) */}
+      <div className="mb-6 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+        {levelHistory.length > 1 && (
+          <button
+            className="flex items-center gap-1 px-3 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded shadow-sm border border-blue-200 transition"
+            onClick={() => {
+              const newHistory = [...levelHistory];
+              newHistory.pop();
+              setLevelHistory(newHistory);
+              setCurrentLevel(newHistory[newHistory.length - 1]);
+            }}
+          >
+            <span className="font-bold">&#8592;</span> Back
+          </button>
+        )}
+        <nav className="flex items-center gap-1 flex-wrap">
+          {breadcrumbPath.map((item, idx, arr) => (
+            <React.Fragment key={idx}>
+              {idx < arr.length - 1 ? (
+                <button
+                  className="hover:underline text-blue-600 font-medium transition"
+                  onClick={() => {
+                    setLevelHistory(levelHistory.slice(0, idx + 1));
+                    setCurrentLevel(item.nodes);
+                  }}
+                  type="button"
+                >
+                  {item.name}
+                </button>
+              ) : (
+                <span className="font-semibold text-gray-900">{item.name}</span>
+              )}
+              {idx < arr.length - 1 && <span className="mx-1">/</span>}
+            </React.Fragment>
+          ))}
+        </nav>
+      </div>
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Chart Section */}
+        <div className="flex-1 bg-gray-50 rounded-xl shadow-inner p-6 flex flex-col items-center justify-center min-w-[320px]">
+          <div className="relative w-full h-[350px] flex items-center justify-center">
+            <Doughnut
+              ref={chartRef}
+              data={chartData}
+              options={chartOptions}
+            />
+            {/* Center label */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
+              <div className="text-lg font-bold text-blue-700">{currentData.labels.length === 1 ? currentData.labels[0] : title}</div>
             </div>
           </div>
-
-          {/* Legend and Stats */}
-          <div className="space-y-6">
-            {/* Legend */}
-            <div className="bg-gray-50 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                <TrendingUp className="w-5 h-5 mr-2 text-gray-600" />
-                Data Breakdown
-              </h3>
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                {currentData.labels.map((label, index) => {
-                  const value = currentData.values[index];
-                  const percentage = ((value / totalValue) * 100).toFixed(1);
-                  const isHovered = hoveredSegment === label;
-                  const hasChildren = currentData.nodes[index].children && currentData.nodes[index].children!.length > 0;
-                  
-                  return (
-                    <div 
-                      key={label}
-                      className={`flex items-center justify-between p-3 rounded-lg transition-all duration-200 cursor-pointer ${
-                        isHovered ? 'bg-white shadow-sm scale-105' : 'hover:bg-white hover:shadow-sm'
-                      }`}
-                      onMouseEnter={() => setHoveredSegment(label)}
-                      onMouseLeave={() => setHoveredSegment(null)}
-                      onClick={() => {
-                        if (hasChildren) {
-                          const clickedNode = currentData.nodes[index];
-                          setCurrentLevel(clickedNode.children!);
-                          setLevelHistory([...levelHistory, clickedNode.children!]);
-                          setClickedSegment(clickedNode.name);
-                        }
-                      }}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div 
-                          className="w-4 h-4 rounded-full shadow-sm"
-                          style={{ backgroundColor: currentData.colors[index] }}
-                        />
-                        <span className="font-medium text-gray-900 text-sm">{label}</span>
-                        {hasChildren && (
-                          <ChevronDown className="w-3 h-3 text-gray-400" />
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-gray-900 text-sm">{value.toLocaleString()}</div>
-                        <div className="text-xs text-gray-500">{percentage}%</div>
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* Legend */}
+          <div className="mt-6 flex flex-wrap gap-4 justify-center">
+            {currentData.labels.map((label, i) => (
+              <div key={label} className="flex items-center gap-2 text-xs">
+                <span className="inline-block w-4 h-4 rounded-full border border-gray-200" style={{ background: currentData.colors[i] }}></span>
+                <span className={hoveredSegment === label ? 'font-bold text-blue-700' : 'text-gray-700'}>{label}</span>
               </div>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Summary Stats</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Total Categories</span>
-                  <span className="font-semibold text-gray-900">{currentData.labels.length}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Largest Segment</span>
-                  <span className="font-semibold text-gray-900">
-                    {Math.max(...currentData.values).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Average Value</span>
-                  <span className="font-semibold text-gray-900">
-                    {Math.round(totalValue / currentData.labels.length).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Current Level</span>
-                  <span className="font-semibold text-gray-900">{levelHistory.length}</span>
-                </div>
-              </div>
-            </div>
+            ))}
           </div>
+        </div>
+        {/* Data Table Section */}
+        <div className="flex-1 bg-white rounded-xl shadow-inner p-6 overflow-x-auto min-w-[320px]">
+          <h3 className="text-base font-semibold text-gray-800 mb-4">Data Table</h3>
+          <table className="min-w-full border border-gray-200 rounded-lg overflow-hidden text-sm">
+            <thead className="bg-blue-50">
+              <tr>
+                <th className="px-4 py-2 text-left font-medium text-blue-700">Name</th>
+                <th className="px-4 py-2 text-left font-medium text-blue-700">Value</th>
+                <th className="px-4 py-2 text-left font-medium text-blue-700">% of Total</th>
+                <th className="px-4 py-2 text-left font-medium text-blue-700">Has Children</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentData.nodes.map((item, i) => {
+                const value = currentData.values[i];
+                const total = currentData.values.reduce((a, b) => a + b, 0);
+                const percent = total ? ((value / total) * 100).toFixed(1) : '0';
+                return (
+                  <tr key={item.name} className={`border-b last:border-b-0 hover:bg-blue-50 transition ${selectedIndex === i ? 'bg-blue-100 !font-bold' : ''}`}>
+                    <td className="px-4 py-2 font-medium text-gray-900">{item.name}</td>
+                    <td className="px-4 py-2 text-gray-700">{value}</td>
+                    <td className="px-4 py-2 text-gray-700">{percent}%</td>
+                    <td className="px-4 py-2 text-center">
+                      {item.children && item.children.length > 0 ? (
+                        <span className="inline-block px-2 py-1 bg-green-100 text-green-700 rounded text-xs">Yes</span>
+                      ) : (
+                        <span className="inline-block px-2 py-1 bg-gray-100 text-gray-500 rounded text-xs">No</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
