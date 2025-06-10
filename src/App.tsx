@@ -14,6 +14,15 @@ const companySalesData = [
 						children: [
 							{ name: 'Laptops', value: 120 },
 							{ name: 'Desktops', value: 80 },
+							{ name: 'Monitors', value: 60 },
+							{
+								name: 'Accessories',
+								children: [
+									{ name: 'Keyboards', value: 30 },
+									{ name: 'Mice', value: 25 },
+									{ name: 'Webcams', value: 15 },
+								],
+							},
 						],
 					},
 					{
@@ -21,6 +30,21 @@ const companySalesData = [
 						children: [
 							{ name: 'Smartphones', value: 200 },
 							{ name: 'Tablets', value: 50 },
+							{
+								name: 'Wearables',
+								children: [
+									{ name: 'Smartwatches', value: 40 },
+									{ name: 'Fitness Bands', value: 20 },
+								],
+							},
+							{
+								name: 'Accessories',
+								children: [
+									{ name: 'Cases', value: 35 },
+									{ name: 'Chargers', value: 28 },
+									{ name: 'Screen Protectors', value: 18 },
+								],
+							},
 						],
 					},
 				],
@@ -30,11 +54,92 @@ const companySalesData = [
 				children: [
 					{ name: 'Refrigerators', value: 60 },
 					{ name: 'Washers', value: 40 },
+					{ name: 'Microwaves', value: 30 },
+					{ name: 'Air Conditioners', value: 25 },
+					{
+						name: 'Small Appliances',
+						children: [
+							{ name: 'Toasters', value: 10 },
+							{ name: 'Blenders', value: 12 },
+							{ name: 'Coffee Makers', value: 15 },
+						],
+					},
 				],
 			},
 			{
 				name: 'Furniture',
-				value: 90,
+				children: [
+					{
+						name: 'Living Room',
+						children: [
+							{ name: 'Sofas', value: 30 },
+							{ name: 'Coffee Tables', value: 12 },
+							{ name: 'TV Stands', value: 8 },
+						],
+					},
+					{
+						name: 'Bedroom',
+						children: [
+							{ name: 'Beds', value: 20 },
+							{ name: 'Wardrobes', value: 10 },
+							{ name: 'Nightstands', value: 5 },
+						],
+					},
+					{
+						name: 'Office',
+						children: [
+							{ name: 'Desks', value: 8 },
+							{ name: 'Chairs', value: 7 },
+						],
+					},
+				],
+			},
+			{
+				name: 'Clothing',
+				children: [
+					{
+						name: 'Men',
+						children: [
+							{ name: 'Shirts', value: 55 },
+							{ name: 'Pants', value: 40 },
+							{ name: 'Shoes', value: 30 },
+						],
+					},
+					{
+						name: 'Women',
+						children: [
+							{ name: 'Dresses', value: 60 },
+							{ name: 'Tops', value: 45 },
+							{ name: 'Shoes', value: 35 },
+						],
+					},
+					{
+						name: 'Kids',
+						children: [
+							{ name: 'T-Shirts', value: 25 },
+							{ name: 'Shorts', value: 18 },
+						],
+					},
+				],
+			},
+			{
+				name: 'Sports Equipment',
+				children: [
+					{
+						name: 'Outdoor',
+						children: [
+							{ name: 'Bicycles', value: 22 },
+							{ name: 'Tents', value: 10 },
+						],
+					},
+					{
+						name: 'Indoor',
+						children: [
+							{ name: 'Treadmills', value: 7 },
+							{ name: 'Dumbbells', value: 14 },
+						],
+					},
+				],
 			},
 		],
 	},
