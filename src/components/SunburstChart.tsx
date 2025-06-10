@@ -162,7 +162,7 @@ const SunburstChart: React.FC<SunburstChartProps> = ({
             const value = ctx.raw as number;
             const total = ctx.dataset.data.reduce((a: number, b: number) => a + b, 0);
             const percent = total ? ((value / total) * 100).toFixed(1) : '0';
-            return `Label: ${label} | Value: ${value} | % of Total: ${percent}%`;
+            return `${label} | Value: ${value} | % of Total: ${percent}%`;
           },
         },
         backgroundColor: '#fff',
